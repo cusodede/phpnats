@@ -228,25 +228,32 @@ class Connection
      *
      * @param string $address Server url string.
      * @param float  $timeout Number of seconds until the connect() system call should timeout.
+     * @param array $tls tls connection params
      *
      * @return resource
      * @throws \Exception Exception raised if connection fails.
      */
-    private function getStream($address, $timeout)
+    private function getStream($address, $timeout, $tls)
     {
-        $errno  = null;
-        $errstr = null;
+        $errNo  = null;
+        $errorStr = null;
 
         set_error_handler(
-            function () {
+            static function () {
                 return true;
             }
         );
-        $fp = stream_socket_client($address, $errno, $errstr, $timeout, STREAM_CLIENT_CONNECT);
-        restore_error_handler();
+
+        if ($tls['enable']) {
+            $context = stream_context_create(['ssl'=> $tls['ssl_context']]);
+            $fp = stream_socket_client($address, $errNo, $errorStr, $timeout, STREAM_CLIENT_CONNECT, $context);
+        } else {
+            $fp = stream_socket_client($address, $errNo, $errorStr, $timeout, STREAM_CLIENT_CONNECT);
+        }
+
 
         if ($fp === false) {
-            throw Exception::forStreamSocketClientError($errstr, $errno);
+            throw Exception::forStreamSocketClientError($errorStr, $errNo);
         }
 
         $timeout      = number_format($timeout, 3);
@@ -443,7 +450,7 @@ class Connection
         }
 
         $this->timeout      = $timeout;
-        $this->streamSocket = $this->getStream($this->options->getAddress(), $timeout);
+        $this->streamSocket = $this->getStream($this->options->getAddress(), $timeout, $this->options->getTlsConnection());
         $this->setStreamTimeout($timeout);
 
         $msg = 'CONNECT '.$this->options;
