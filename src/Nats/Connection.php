@@ -228,26 +228,32 @@ class Connection
      *
      * @param string $address Server url string.
      * @param float  $timeout Number of seconds until the connect() system call should timeout.
+     * @param array $tls tls connection params
      *
-     * @throws \Exception Exception raised if connection fails.
      * @return resource
+     * @throws \Exception Exception raised if connection fails.
      */
-    private function getStream($address, $timeout, $context)
+    private function getStream($address, $timeout, $tls)
     {
-        $errno  = null;
-        $errstr = null;
+        $errNo  = null;
+        $errorStr = null;
 
         set_error_handler(
-            function () {
+            static function () {
                 return true;
             }
         );
 
-        $fp = stream_socket_client($address, $errno, $errstr, $timeout, STREAM_CLIENT_CONNECT, $context);
-        restore_error_handler();
+        if ($tls['enable']) {
+            $context = stream_context_create(['ssl'=> $tls['ssl_context']]);
+            $fp = stream_socket_client($address, $errNo, $errorStr, $timeout, STREAM_CLIENT_CONNECT, $context);
+        } else {
+            $fp = stream_socket_client($address, $errNo, $errorStr, $timeout, STREAM_CLIENT_CONNECT);
+        }
+
 
         if ($fp === false) {
-            throw Exception::forStreamSocketClientError($errstr, $errno);
+            throw Exception::forStreamSocketClientError($errorStr, $errNo);
         }
 
         $timeout      = number_format($timeout, 3);
@@ -316,8 +322,8 @@ class Connection
      *
      * @param string $payload Message data.
      *
-     * @throws \Exception Raises if fails sending data.
      * @return void
+     * @throws \Exception Raises if fails sending data.
      */
     private function send($payload)
     {
@@ -395,8 +401,8 @@ class Connection
      *
      * @param string $line Message command from Nats.
      *
-     * @throws             Exception If subscription not found.
      * @return             void
+     * @throws             Exception If subscription not found.
      * @codeCoverageIgnore
      */
     private function handleMSG($line)
@@ -409,7 +415,7 @@ class Connection
         if (count($parts) === 5) {
             $length  = trim($parts[4]);
             $subject = $parts[3];
-        } elseif (count($parts) === 4) {
+        } else if (count($parts) === 4) {
             $length  = trim($parts[3]);
             $subject = $parts[1];
         }
@@ -444,34 +450,19 @@ class Connection
         }
 
         $this->timeout      = $timeout;
-        $this->streamSocket = $this->getStream(
-            $this->options->getAddress(), $timeout, $this->options->getStreamContext());
+        $this->streamSocket = $this->getStream($this->options->getAddress(), $timeout, $this->options->getTlsConnection());
         $this->setStreamTimeout($timeout);
-
-        $infoResponse = $this->receive();
-
-        if ($this->isErrorResponse($infoResponse) === true) {
-            throw Exception::forFailedConnection($infoResponse);
-        } else {
-            $this->processServerInfo($infoResponse);
-            if ($this->serverInfo->isTLSRequired()) {
-                set_error_handler(
-                    function ($errno, $errstr, $errfile, $errline) {
-                        restore_error_handler();
-                        throw Exception::forFailedConnection($errstr);
-                    });
-
-                if (!stream_socket_enable_crypto(
-                        $this->streamSocket, true, STREAM_CRYPTO_METHOD_TLSv1_2_CLIENT)) {
-                    throw Exception::forFailedConnection('Error negotiating crypto');
-                }
-
-                restore_error_handler();
-            }
-        }
 
         $msg = 'CONNECT '.$this->options;
         $this->send($msg);
+        $connectResponse = $this->receive();
+
+        if ($this->isErrorResponse($connectResponse) === true) {
+            throw Exception::forFailedConnection($connectResponse);
+        } else {
+            $this->processServerInfo($connectResponse);
+        }
+
         $this->ping();
         $pingResponse = $this->receive();
 
@@ -576,9 +567,9 @@ class Connection
      * @param string $payload Message data.
      * @param string $inbox   Message inbox.
      *
-     * @throws Exception If subscription not found.
      * @return void
      *
+     * @throws Exception If subscription not found.
      */
     public function publish($subject, $payload = null, $inbox = null)
     {
