@@ -1,5 +1,5 @@
 {
-    "name": "cusodede/nats",
+    "name": "cusodede/phpnats",
     "description": "A nats.io client in PHP",
     "type": "library",
     "minimum-stability": "dev",
