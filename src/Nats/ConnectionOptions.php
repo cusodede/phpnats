@@ -81,11 +81,18 @@ class ConnectionOptions
      */
     private $reconnect = true;
 
+    /**
+     * nats server has tls protection
+     * @var bool
+     */
+    private $isTls = false;
 
-    private $tlsConnection = [
-        'enable' => false,
-        'ssl_context' => [],
-    ];
+    /**
+     * ssl context for protected tls connection
+     * https://www.php.net/manual/ru/context.ssl.php
+     * @var array
+     */
+    private $sslContext = [];
 
     /**
      * Allows to define parameters which can be set by passing them to the class constructor.
@@ -155,7 +162,7 @@ class ConnectionOptions
               'version'  => $this->version,
               'verbose'  => $this->verbose,
               'pedantic' => $this->pedantic,
-              'tls_required' => $this->tlsConnection['enable'],
+              'tls_required' => $this->isTls,
              ];
         if (empty($this->user) === false) {
             $a['user'] = $this->user;
@@ -404,59 +411,45 @@ class ConnectionOptions
 
     /**
      * Set tls connection protect
-     * @param bool $tlsRequired
+     * @param $isTls
      * @return $this
      */
-    public function setTlsConnection($tlsRequired)
+    public function setTlsStatus($isTls)
     {
-        $this->tlsConnection['enable'] = $tlsRequired;
+        $this->isTls = $isTls;
 
         return $this;
     }
 
     /**
      * Get tls connection params
+     * @return bool
+     */
+    public function isTls()
+    {
+        return $this->isTls;
+    }
+
+    /**
+     * context params for stream_context_create if tls protected server
+     * https://www.php.net/manual/ru/context.ssl.php
+     * @param array $data
+     * @return $this
+     */
+    public function setSslContext($data)
+    {
+        $this->sslContext = $data;
+
+        return $this;
+    }
+
+    /**
+     * Get tls connection protect
      * @return array
      */
-    public function getTlsConnection()
+    public function getSslContext()
     {
-        return $this->tlsConnection;
-    }
-
-    /**
-     * Set tls connection protect
-     * @param string $filePath
-     * @return $this
-     */
-    public function setTlsCertClientFile($filePath)
-    {
-        $this->tlsConnection['ssl_context']['local_cert'] = $filePath;
-
-        return $this;
-    }
-
-    /**
-     * Set tls connection protect
-     * @param string $filePath
-     * @return $this
-     */
-    public function setTlsKeyClientFile($filePath)
-    {
-        $this->tlsConnection['ssl_context']['local_pk'] = $filePath;
-
-        return $this;
-    }
-
-    /**
-     * Добавляет в метод stream_context_create параметры ssl для защищенного подключения
-     * https://www.php.net/manual/ru/context.ssl.php
-     * @param string $name
-     * @param string $value
-     * @return void
-     */
-    public function addSslContextParam($name, $value)
-    {
-        $this->tlsConnection['ssl_context'][$name] = $value;
+        return $this->sslContext;
     }
 
     /**

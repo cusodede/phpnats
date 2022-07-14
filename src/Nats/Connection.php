@@ -228,12 +228,11 @@ class Connection
      *
      * @param string $address Server url string.
      * @param float  $timeout Number of seconds until the connect() system call should timeout.
-     * @param array $tls tls connection params
      *
      * @return resource
      * @throws \Exception Exception raised if connection fails.
      */
-    private function getStream($address, $timeout, $tls)
+    private function getStream($address, $timeout)
     {
         $errNo  = null;
         $errorStr = null;
@@ -244,13 +243,8 @@ class Connection
             }
         );
 
-        if ($tls['enable']) {
-            $context = stream_context_create(['ssl'=> $tls['ssl_context']]);
-            $fp = stream_socket_client($address, $errNo, $errorStr, $timeout, STREAM_CLIENT_CONNECT, $context);
-        } else {
-            $fp = stream_socket_client($address, $errNo, $errorStr, $timeout, STREAM_CLIENT_CONNECT);
-        }
-
+        $context = stream_context_create(['ssl'=> $this->options->getSslContext()]);
+        $fp = stream_socket_client($address, $errNo, $errorStr, $timeout, STREAM_CLIENT_CONNECT, $context);
 
         if ($fp === false) {
             throw Exception::forStreamSocketClientError($errorStr, $errNo);
@@ -450,18 +444,32 @@ class Connection
         }
 
         $this->timeout      = $timeout;
-        $this->streamSocket = $this->getStream($this->options->getAddress(), $timeout, $this->options->getTlsConnection());
+        $this->streamSocket = $this->getStream($this->options->getAddress(), $timeout);
         $this->setStreamTimeout($timeout);
 
-        $msg = 'CONNECT '.$this->options;
-        $this->send($msg);
         $connectResponse = $this->receive();
 
         if ($this->isErrorResponse($connectResponse) === true) {
             throw Exception::forFailedConnection($connectResponse);
-        } else {
-            $this->processServerInfo($connectResponse);
         }
+
+        $this->processServerInfo($connectResponse);
+
+        if ($this->options->isTls()) {
+            // turn on TLS crypto
+            set_error_handler(function ($errno, $errstr) {
+                    restore_error_handler();
+                    throw Exception::forFailedConnection($errstr);
+                });
+            if (!stream_socket_enable_crypto($this->streamSocket, true)) {
+                throw Exception::forFailedConnection('can\'t enable crypto');
+            }
+            restore_error_handler();
+        }
+
+        $msg = 'CONNECT '.$this->options;
+        $this->send($msg);
+
 
         $this->ping();
         $pingResponse = $this->receive();
