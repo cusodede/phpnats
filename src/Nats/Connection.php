@@ -395,7 +395,7 @@ class Connection
      *
      * @param string $line Message command from Nats.
      *
-     * @return             void
+     * @return             mixed
      * @throws             Exception If subscription not found.
      * @codeCoverageIgnore
      */
@@ -422,11 +422,11 @@ class Connection
         }
 
         $func = $this->subscriptions[$sid];
-        if (is_callable($func) === true) {
-            $func($msg);
-        } else {
+        if (!is_callable($func)) {
             throw Exception::forSubscriptionCallbackInvalid($sid);
         }
+
+        return $func($msg);
     }
 
     /**
@@ -596,7 +596,7 @@ class Connection
      *
      * @param integer $quantity Number of messages to wait for.
      *
-     * @return Connection $connection Connection object
+     * @return mixed return from callback function or null
      */
     public function wait($quantity = 0)
     {
@@ -615,9 +615,9 @@ class Connection
 
             if (strpos($line, 'MSG') === 0) {
                 $count++;
-                $this->handleMSG($line);
+                $retData = $this->handleMSG($line);
                 if (($quantity !== 0) && ($count >= $quantity)) {
-                    return $this;
+                    return $retData;
                 }
             }
 
@@ -626,7 +626,7 @@ class Connection
 
         $this->close();
 
-        return $this;
+        return null;
     }
 
     /**
