@@ -509,7 +509,8 @@ class Connection
         );
         $this->unsubscribe($sid, 1);
         $this->publish($subject, $payload, $inbox);
-        $this->wait(1);
+
+        return $this->wait(1);
     }
 
     /**
