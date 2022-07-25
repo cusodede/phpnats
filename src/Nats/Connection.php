@@ -498,7 +498,7 @@ class Connection
      * @param string   $payload  Message data.
      * @param \Closure $callback Closure to be executed as callback.
      *
-     * @return void
+     * @return mixed
      */
     public function request($subject, $payload, \Closure $callback)
     {
